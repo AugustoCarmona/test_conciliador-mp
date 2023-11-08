@@ -187,7 +187,7 @@ def param_getter(cursor: object, lote: int, result: dict, is_test: bool = False)
         metadata = 'link de pago'
 
     # Verifica que se trate de un pago de pago televentas
-    if metadata == '{}' and external_reference and re.match("^\d+$", external_reference):
+    if metadata == '{}' and external_reference and re.match(r"^\d+$", external_reference):
         identification = external_reference
         operation_type = 'Pago Televentas'
         description = 'Pago Televentas'
