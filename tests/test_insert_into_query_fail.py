@@ -1,5 +1,4 @@
 import unittest
-import pyodbc
 import os
 import sys
 from dotenv import load_dotenv
@@ -13,19 +12,10 @@ from conciliador_mp.mp_utils import param_getter
 
 
 def setup_db():
-    """ Prepara un cursor y una conexión a la base de datos para realizar pruebas.
+    """ Prepara una conexión a la base de datos para realizar pruebas.
     """
-    server = os.getenv('TST_SERVER')
-    db = os.getenv('DB')
-    usr = os.getenv('TUSR')
-    pas = os.getenv('TPASS')
     test_api = os.getenv('TEST_API')
-
-    connection_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};Server={server};Database={db};UID={usr};PWD={pas};'
-    connection = pyodbc.connect(connection_str)
-    cursor = connection.cursor()
-    
-    return cursor, connection, test_api
+    return test_api
 
 
 class TestParamGetter(unittest.TestCase):
@@ -50,11 +40,11 @@ class TestParamGetter(unittest.TestCase):
     ]
 
     def setUp(self) -> None:
-        self.cursor, self.connection, self.test_api = setup_db()
+        self.test_api = setup_db()
 
     def template_method(self, payment):
         response = get_single_pay(self.test_api, payment)
-        data = param_getter(self.cursor, 0, response, True)
+        data = param_getter(None, 0, response, True)
         self.assertNotEqual(data[0], '')  # identification
         self.assertNotEqual(data[1], '')  # transaction_amount
         self.assertNotEqual(data[2], '')  # date_created
