@@ -31,22 +31,22 @@ def setup_db():
 class TestParamGetter(unittest.TestCase):
 
     payments = [
-        # pos_payment (5)
-        '64457981328',
-        '64300395971',
-        '64298960943',
-        '64452873412',
-        '64450735988',
-
-        # not approved (6)
-        '61219682089',
-        '61360967495',
-        '61379013107',
-        '60855809113',
-        '61169287727',
-        '60291488545',
-
-        '65973364331'
+        '66041643775',
+        '66201361486',
+        '66028465159',
+        '66199333742',
+        '66197434780',
+        '66197358844',
+        '66024218145',
+        '66023939283',
+        '66196265166',
+        '66120313704',
+        '65973145875',
+        '65973364331',
+        '66201662948',
+        '65956319237',
+        '65944588841',
+        '66017573321'
     ]
 
     def setUp(self) -> None:
@@ -54,24 +54,17 @@ class TestParamGetter(unittest.TestCase):
 
     def template_method(self, payment):
         response = get_single_pay(self.test_api, payment)
-        data = param_getter(self.cursor, 0, response["results"][0])
-
-        self.assertTrue(
-            # - generalmente pagos no approved no tienen identification
-            # - usualmente venta presencial siempre es pos_payment
-            # - si identification_type viene null no habrá description ambigua
-            # por lo tanto los tres primeros podrían no tenerse en cuenta para condicionar (en especial casos 2 y 3)
-            # data[0] == '' or  # identification
-            # data[1] == '' or  # transaction_amount
-            # data[2] == '' or  # date_created
-            # data[4] == '{}' or  # metadata
-            # data[6] == 'Venta Presencial' or data[6] == 'Producto' or data[6] == 'Pago Bank Transfer QR V3 3.0' or  # description
-            
-            # estos deberían ser los casos filtro
-            data[3] != 'approved' or  # status
-            data[5] == 'pos_payment' or  # operation_type
-            data[7] != True  # insert exitoso
-        )
+        data = param_getter(self.cursor, 0, response)
+        self.assertNotEqual(data[0], '')  # identification
+        self.assertNotEqual(data[1], '')  # transaction_amount
+        self.assertNotEqual(data[2], '')  # date_created
+        self.assertEqual(data[3], 'approved')  # status
+        self.assertNotEqual(data[4], '{}')  # metadata
+        self.assertNotEqual(data[5], 'pos_payment')  # operation_type
+        self.assertNotEqual(data[6], 'Venta Presencial')  # description
+        self.assertNotEqual(data[6], 'Producto')  # description
+        self.assertNotEqual(data[6], 'Pago Bank Transfer QR V3 3.0')  # description
+        self.assertEqual(data[7], True)  # insert exitoso
 
 
 for i, payment in enumerate(TestParamGetter.payments):

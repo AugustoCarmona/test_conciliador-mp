@@ -95,16 +95,80 @@ def insert_into_query(id_transaccion, identification, transaction_amount, date_c
     return query, params
 
 
-def param_getter(cursor: object, lote: int, transfer_ids: dict, result: dict) -> None:
+# -------------------------------------------------------------------------------------------------------------
+def check_cc(cursor: object, cuit: str) -> bool:
+    """ Verifica si el cuit existe en la base de datos.
+    
+    Argumentos:
+        cursor (obj): Cursor a la base de datos.
+        cuit (str): Cuit a verificar.
+
+    Retorno:
+        bool: Retorna True si el cuit existe en la base de datos, False en caso contrario.
+    """
+    query = f"""
+    IF EXISTS (
+        SELECT * FROM cuentascorrientes
+        WHERE NroCtaCte = '{cuit}'
+    )
+    BEGIN
+        SELECT 1
+    END
+    """
+    try:
+        cursor.execute(query)
+        return cursor.fetchone()[0] == 1
+    except Exception as e:
+        logging.debug(f'No se pudo efectuar la query "check CC": {e}')
+        return False
+
+
+# -------------------------------------------------------------------------------------------------------------
+def send_mail(cursor:object, id_transaccion: str, identification: str, transaction_amount: str, operation_type: str, status: str) -> None:
+    """ Envia un mail con el mensaje especificado.
+
+    Argumentos:
+        message (str): Mensaje a enviar.
+    """
+    message = f"""
+        Estimado, se informa que la transacción {id_transaccion} no pudo ser conciliada, ya que no existe en la base de datos
+        alguna cuenta corriente que se corresponda con el Cuit {identification}.
+
+        Monto: {transaction_amount}
+        Tipo de operación: {operation_type}
+        Estado: {status}
+    """
+
+    get_mails = f"""
+    SELECT email_address FROM Operators
+    WHERE id = 283
+    """
+    cursor.execute(get_mails)
+    mails = cursor.fetchall()
+
+    query= f"""
+    EXEC msdb.dbo.sp_send_dbmail
+    @profile_name = 'Nemesis',
+    @recipients = '{mails}',
+    @copy_recipients = 'acarmona@osdepym.com.ar',
+    @subject = 'Transferencia no conciliada',
+    @body = '{message}';
+    """
+
+    cursor.execute(query)
+
+
+# -------------------------------------------------------------------------------------------------------------
+def param_getter(cursor: object, lote: int, result: dict) -> None:
     """ Extrae parámetros de un diccionario resultante de una API y ejecuta una operación de inserción en la base de datos.
 
     Args:
-        result (dict): Diccionario que contiene la información de una transacción.
-        transfer_ids (dict): Diccionario con los ids de transferencia.
         cursor (obj): Cursor a la base de datos.
         lote (int): Lote de la transacción.
+        result (dict): Diccionario que contiene la información de una transacción.
     """
     logger = load_logger()
+    insert_exitoso = False
 
     id_transaccion = str(result.get('id', ''))
     identification = str(result.get('payer', {}).get('identification', {}).get('number', {})) # payer -> identification -> number
@@ -118,25 +182,26 @@ def param_getter(cursor: object, lote: int, transfer_ids: dict, result: dict) ->
     external_reference = str(result.get('external_reference', ''))
     payment_link = str(result.get('point_of_interaction', {}).get('business_info', {}).get('sub_unit', ''))
 
+
+    # Verifica que se trate de un pago por link de pago
     if payment_link == 'payment_link':
         metadata = 'link de pago'
 
-    if metadata == '{}' and external_reference and re.match("^\d+$", external_reference):  # pago televentas
+    # Verifica que se trate de un pago de pago televentas
+    if metadata == '{}' and external_reference and re.match("^\d+$", external_reference):
         identification = external_reference
         operation_type = 'Pago Televentas'
         description = 'Pago Televentas'
         metadata = 'Pago Televentas'
 
     # Se evita ingresar los pagos no aprovados con metadata vacía  o provenientes de
-    # ventas presenciales, ventas de producto, qr, policonsultorios (pos payment) y transferencias.
-
-    # pagos checkout pro
-    if(
+    # ventas presenciales, ventas de producto, qr o policonsultorios (pos payment).
+    if (
         identification and transaction_amount and date_created and
         status == 'approved' and
         metadata != '{}' and
-        all(substring not in description for substring in ['Venta presencial', 'Producto', 'Pago Bank Transfer QR V3 3.0']) and
-        all(substring not in operation_type for substring in ['pos_payment', 'money_transfer'])
+        operation_type != 'pos_payment' and
+        all(substring not in description for substring in ['Venta presencial', 'Producto', 'Pago Bank Transfer QR V3 3.0'])
     ):
         
         if identification == 'None':
@@ -146,18 +211,37 @@ def param_getter(cursor: object, lote: int, transfer_ids: dict, result: dict) ->
             if match:
                 identification = match.group(1)
 
-        transfer_ids[id_transaccion] = [identification, transaction_amount, date_created, description, metadata, operation_type, status, status_detail]
-        query, params = insert_into_query(
-                                        id_transaccion, identification,
-                                        transaction_amount, date_created,
-                                        description, metadata,
-                                        operation_type, status,
-                                        status_detail, str(lote))
+        # Verifica para las transacciones que el cuit se corresponda con una cuenta corriente existente.
+        if operation_type == 'money_transfer' and description != 'Devolución de Percepciones Generales':
+            print("Ojo la transacción: ", id_transaccion)
+            if check_cc(cursor, identification) == False:
+                logger.warning(f"El cuit {identification} no existe en la base de datos.")
+                send_mail(id_transaccion, identification, transaction_amount, operation_type, status)
+                return
+
+        query, params = insert_into_query (
+            id_transaccion, identification,
+            transaction_amount, date_created,
+            description, metadata,
+            operation_type, status,
+            status_detail, str(lote)
+        )
         try:
             cursor.execute(query, params)
             logger.info(f"Valores insertados: {params}")
+            insert_exitoso = True
         except Exception as e:
             logger.warning(f"{params}")
             logger.error(f"Hubo un fallo al ejecutar el insert: {e}")
-# -------------------------------------------------------------------------------------------------------------
+            insert_exitoso = False
 
+    return (
+        identification,
+        transaction_amount,
+        date_created,
+        status,
+        metadata,
+        operation_type,
+        description,
+        insert_exitoso
+    )
