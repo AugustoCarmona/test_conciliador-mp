@@ -10,6 +10,26 @@ load_dotenv()
 
 from conciliador_mp.mp_utils import param_getter
 
+# Define el fixture que manejará la conexión a la base de datos
+@pytest.fixture(scope="session")
+def db_connection():
+    server = os.getenv('TST_SERVER')
+    db = os.getenv('DB')
+    usr = os.getenv('TUSR')
+    pas = os.getenv('TPASS')
+
+    connection_str = f'DRIVER={{ODBC Driver 17 for SQL Server}};Server={server};Database={db};UID={usr};PWD={pas};'
+    connection = pyodbc.connect(connection_str)
+    cursor = connection.cursor()
+    
+    # Te devuelve un cursor y una conexión para usar en tus pruebas
+    yield cursor, connection
+
+    # Después de las pruebas, cierra la conexión y el cursor
+    cursor.close()
+    connection.close()
+
+
 payments = [
         '66041643775',
         '66201361486',
