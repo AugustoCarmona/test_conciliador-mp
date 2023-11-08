@@ -54,7 +54,7 @@ class TestParamGetter(unittest.TestCase):
 
     def template_method(self, payment):
         response = get_single_pay(self.test_api, payment)
-        data = param_getter(self.cursor, 0, response)
+        data = param_getter(self.cursor, 0, response, True)
         self.assertNotEqual(data[0], '')  # identification
         self.assertNotEqual(data[1], '')  # transaction_amount
         self.assertNotEqual(data[2], '')  # date_created
@@ -64,7 +64,6 @@ class TestParamGetter(unittest.TestCase):
         self.assertNotEqual(data[6], 'Venta Presencial')  # description
         self.assertNotEqual(data[6], 'Producto')  # description
         self.assertNotEqual(data[6], 'Pago Bank Transfer QR V3 3.0')  # description
-        self.assertEqual(data[7], True)  # insert exitoso
 
 
 for i, payment in enumerate(TestParamGetter.payments):

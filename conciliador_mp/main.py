@@ -3,9 +3,6 @@ import os
 import time as tm
 from dotenv import load_dotenv
 import schedule
-
-import pyodbc
-
 from mp_utils import load_logger
 import base_procedure
 

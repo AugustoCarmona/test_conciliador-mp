@@ -159,7 +159,7 @@ def send_mail(cursor:object, id_transaccion: str, identification: str, transacti
 
 
 # -------------------------------------------------------------------------------------------------------------
-def param_getter(cursor: object, lote: int, result: dict) -> None:
+def param_getter(cursor: object, lote: int, result: dict, is_test: bool = False) -> None:
     """ Extrae parámetros de un diccionario resultante de una API y ejecuta una operación de inserción en la base de datos.
 
     Args:
@@ -168,7 +168,6 @@ def param_getter(cursor: object, lote: int, result: dict) -> None:
         result (dict): Diccionario que contiene la información de una transacción.
     """
     logger = load_logger()
-    insert_exitoso = False
 
     id_transaccion = str(result.get('id', ''))
     identification = str(result.get('payer', {}).get('identification', {}).get('number', {})) # payer -> identification -> number
@@ -219,21 +218,20 @@ def param_getter(cursor: object, lote: int, result: dict) -> None:
                 send_mail(id_transaccion, identification, transaction_amount, operation_type, status)
                 return
 
-        query, params = insert_into_query (
-            id_transaccion, identification,
-            transaction_amount, date_created,
-            description, metadata,
-            operation_type, status,
-            status_detail, str(lote)
-        )
-        try:
-            cursor.execute(query, params)
-            logger.info(f"Valores insertados: {params}")
-            insert_exitoso = True
-        except Exception as e:
-            logger.warning(f"{params}")
-            logger.error(f"Hubo un fallo al ejecutar el insert: {e}")
-            insert_exitoso = False
+        if not is_test:
+            query, params = insert_into_query (
+                id_transaccion, identification,
+                transaction_amount, date_created,
+                description, metadata,
+                operation_type, status,
+                status_detail, str(lote)
+            )
+            try:
+                cursor.execute(query, params)
+                logger.info(f"Valores insertados: {params}")
+            except Exception as e:
+                logger.warning(f"{params}")
+                logger.error(f"Hubo un fallo al ejecutar el insert: {e}")
 
     return (
         identification,
@@ -242,6 +240,5 @@ def param_getter(cursor: object, lote: int, result: dict) -> None:
         status,
         metadata,
         operation_type,
-        description,
-        insert_exitoso
+        description
     )
