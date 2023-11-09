@@ -1,6 +1,7 @@
 import os
 import sys
 import pytest
+import pyodbc
 from dotenv import load_dotenv
 from api_request_for_tests import get_single_pay
 
